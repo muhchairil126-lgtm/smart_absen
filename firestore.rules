@@ -1,0 +1,134 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Admin check - uses email for list optimization
+    function isBootstrapAdmin() {
+      return isSignedIn() && request.auth.token.email == 'muhchairil126@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrapAdmin() || (isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // --- Validations ---
+
+    function isValidUser(data) {
+      return data.uid is string && data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email is string && data.email == request.auth.token.email &&
+             data.role in ['admin', 'employee'] &&
+             (data.keys().hasAll(['uid', 'name', 'email', 'role']) && data.keys().size() <= 6);
+    }
+
+    function isValidAttendance(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.userName is string && data.userName.size() <= 100 &&
+             data.date is string && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+             data.timestamp == request.time &&
+             data.session in ['morning', 'afternoon'] &&
+             data.status in ['present', 'permit', 'sick', 'overtime'] &&
+             data.isLate is bool &&
+             data.lateMinutes is int &&
+             data.overtimeMinutes is int &&
+             (data.keys().hasAll(['userId', 'userName', 'date', 'timestamp', 'session', 'status', 'isLate', 'lateMinutes', 'overtimeMinutes']) && data.keys().size() <= 10);
+    }
+
+    function isValidLeave(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.userName is string && data.userName.size() <= 100 &&
+             data.startDate is string && data.startDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+             data.endDate is string && data.endDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+             data.reason is string && data.reason.size() <= 1000 &&
+             data.status in ['pending', 'approved', 'rejected'] &&
+             data.createdAt == request.time &&
+             (data.keys().hasAll(['userId', 'userName', 'startDate', 'endDate', 'reason', 'status', 'createdAt']) && data.keys().size() <= 8);
+    }
+
+    // --- Collections ---
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      
+      allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUser(incoming()) && (
+        // Prevent new users from making themselves admin unless they are the bootstrap admin
+        (incoming().role == 'employee' || isBootstrapAdmin())
+      );
+
+      allow update: if isSignedIn() && isValidId(userId) && isOwner(userId) && isValidUser(incoming()) && (
+        // Employee action: Update name/employeeId, but NOT role
+        (incoming().role == existing().role && incoming().uid == existing().uid && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'employeeId'])) ||
+        // Admin action: Full update
+        isAdmin()
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /attendance/{attendanceId} {
+      allow get: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
+      allow list: if isSignedIn() && (
+        (resource.data.userId == request.auth.uid) || 
+        isBootstrapAdmin() ||
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+
+      allow create: if isSignedIn() && isValidId(attendanceId) && isValidAttendance(incoming()) && (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+
+      allow update: if isAdmin() && isValidAttendance(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'isLate', 'lateMinutes', 'overtimeMinutes', 'userName']) ||
+        isAdmin()
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    match /leaves/{leaveId} {
+      allow get: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
+      allow list: if isSignedIn() && (
+        (resource.data.userId == request.auth.uid) || 
+        isAdmin()
+      );
+
+      allow create: if isSignedIn() && isValidId(leaveId) && isValidLeave(incoming()) && (
+        incoming().status == 'pending' &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+
+      allow update: if isAdmin() && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'adminComment']);
+      
+      allow delete: if isAdmin();
+    }
+  }
+}

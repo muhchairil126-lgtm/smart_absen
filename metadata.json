@@ -1,0 +1,9 @@
+{
+  "name": "Remix: AbsenKita",
+  "description": "Aplikasi manajemen kehadiran karyawan dengan fitur absensi pagi/siang, pelacakan lokasi, barcode, dan dashboard admin.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}
