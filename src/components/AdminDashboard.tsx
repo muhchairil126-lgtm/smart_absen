@@ -43,8 +43,7 @@ import * as XLSX from 'xlsx';
 import AddEmployeeForm from './AddEmployeeForm';
 import QRScanner from './QRScanner';
 import IDCard from './IDCard';
-import { aiService } from '../services/aiService';
-import { Sparkles, Download, FileSpreadsheet } from 'lucide-react';
+import { Download, FileSpreadsheet } from 'lucide-react';
 
 interface Props {
   user: FirebaseUser;
@@ -371,8 +370,6 @@ export default function AdminDashboard({ user, profile }: Props) {
               </div>
             </div>
 
-            {/* AI Insights Section */}
-            <AIInsights records={records} />
           </div>
         )}
 
@@ -792,60 +789,6 @@ function MobileNavBtn({ active, icon, onClick }: any) {
     >
       {React.cloneElement(icon, { size: 24 })}
     </button>
-  );
-}
-
-function AIInsights({ records }: { records: AttendanceRecord[] }) {
-  const [insight, setInsight] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const getAIAnalysis = async () => {
-    setLoading(true);
-    const text = await aiService.getAttendanceInsights(records);
-    setInsight(text);
-    setLoading(false);
-  };
-
-  return (
-    <div className="bg-slate-900 p-8 lg:p-10 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
-      <div className="absolute top-0 right-0 p-12 -mr-8 -mt-8 text-emerald-500/10 group-hover:scale-110 transition-transform">
-        <Sparkles size={120} />
-      </div>
-      
-      <div className="relative z-10">
-        <div className="flex items-center gap-3 mb-6">
-          <Sparkles className="text-emerald-400 animate-pulse" size={24} />
-          <h3 className="text-xl font-black tracking-tight">AI Attendance Insight</h3>
-        </div>
-
-        {insight ? (
-          <div className="space-y-4">
-            <div className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap font-medium">
-              {insight}
-            </div>
-            <button 
-              onClick={() => setInsight(null)}
-              className="text-[10px] font-black uppercase text-emerald-400 tracking-widest hover:underline"
-            >
-              Tutup Analisis
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-start gap-4">
-            <p className="text-slate-400 text-sm max-w-lg">
-              Gunakan kecerdasan buatan untuk menganalisis tren kehadiran, mendeteksi pola keterlambatan, dan mendapatkan saran manajemen secara otomatis.
-            </p>
-            <button
-              onClick={getAIAnalysis}
-              disabled={loading}
-              className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black rounded-2xl transition-all disabled:opacity-50"
-            >
-              {loading ? "Menganalisis..." : "Generate Analysis"}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
   );
 }
 
